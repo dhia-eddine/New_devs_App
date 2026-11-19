@@ -1,29 +1,36 @@
 import json
+import logging
+from typing import Any
+
 import redis.asyncio as redis
-from typing import Dict, Any
-import os
+from redis.exceptions import RedisError
 
-# Initialize Redis client (typically configured centrally).
-redis_client = redis.Redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+from app.config import settings
+from app.services.reservations import calculate_total_revenue
 
-async def get_revenue_summary(property_id: str, tenant_id: str) -> Dict[str, Any]:
-    """
-    Fetches revenue summary, utilizing caching to improve performance.
-    """
-    cache_key = f"revenue:{property_id}"
-    
-    # Try to get from cache
-    cached = await redis_client.get(cache_key)
-    if cached:
-        return json.loads(cached)
-    
-    # Revenue calculation is delegated to the reservation service.
-    from app.services.reservations import calculate_total_revenue
-    
-    # Calculate revenue
-    result = await calculate_total_revenue(property_id, tenant_id)
-    
-    # Cache the result for 5 minutes
-    await redis_client.setex(cache_key, 300, json.dumps(result))
-    
+logger = logging.getLogger(__name__)
+redis_client = redis.Redis.from_url(settings.redis_url, socket_connect_timeout=1, socket_timeout=1)
+
+
+async def get_revenue_summary(
+    property_id: str,
+    tenant_id: str | None,
+    year: int | None = None,
+    month: int | None = None,
+) -> dict[str, Any] | None:
+    cache_key = f"revenue:v2:{json.dumps([tenant_id, property_id, year, month])}"
+    try:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            return json.loads(cached)
+    except (RedisError, ValueError):
+        logger.warning("Revenue cache read failed")
+
+    result = await calculate_total_revenue(property_id, tenant_id, year, month)
+    if result is not None:
+        try:
+            await redis_client.setex(cache_key, 300, json.dumps(result))
+        except RedisError:
+            logger.warning("Revenue cache write failed")
+
     return result

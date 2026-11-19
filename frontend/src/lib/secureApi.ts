@@ -1449,23 +1449,20 @@ export class SecureAPIClient {
   }
 
   // ============= DASHBOARD API =============
-  /**
-   * Get dashboard summary with optional simulation header
-   */
-  async getDashboardSummary(propertyId: string, options?: { simulatedTenant?: string, timestamp?: number }) {
-    const queryParams = new URLSearchParams({ property_id: propertyId });
-    if (options?.timestamp) {
-      queryParams.append('_t', options.timestamp.toString());
-    }
+  async getDashboardProperties() {
+    return this.request<{ id: string; name: string }[]>("/api/v1/dashboard/properties");
+  }
 
-    const requestOptions: RequestInit = {};
-    if (options?.simulatedTenant) {
-      requestOptions.headers = {
-        'X-Simulated-Tenant': options.simulatedTenant
-      };
-    }
-
-    return this.request<any>(`/api/v1/dashboard/summary?${queryParams}`, requestOptions);
+  async getDashboardSummary(propertyId: string, year?: number, month?: number) {
+    const params = new URLSearchParams({ property_id: propertyId });
+    if (year !== undefined) params.set("year", String(year));
+    if (month !== undefined) params.set("month", String(month));
+    return this.request<{
+      property_id: string;
+      total_revenue: number;
+      currency: string;
+      reservations_count: number;
+    }>(`/api/v1/dashboard/summary?${params}`);
   }
 
   async uploadCompanyLogo(logo_url: string) {

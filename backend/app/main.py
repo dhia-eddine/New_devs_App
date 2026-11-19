@@ -14,6 +14,7 @@ import logging
 import os
 import time
 
+from app.core.database_pool import db_pool
 from app.core.redis_client import redis_client
 from .api.v1 import (
     users_lightning,
@@ -122,6 +123,7 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     logger.info("Shutting down...")
+    await db_pool.close()
 
     # Shutdown async processor
     await async_processor.shutdown()
